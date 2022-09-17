@@ -4,7 +4,7 @@
 # Date: September 9, 2022 #
 ###########################
 
-setwd("D:/OneDrive - Johns Hopkins/Course/340.728.01 - Advanced Methods for Design and Analysis of Cohort Studies/project/AMDACS_group_project")
+setwd("/Users/zhengtinghe/Library/CloudStorage/OneDrive-JohnsHopkins/Course/340.728.01 - Advanced Methods for Design and Analysis of Cohort Studies/project/AMDACS_group_project")
 
 require(tidyverse)
 require(haven)
