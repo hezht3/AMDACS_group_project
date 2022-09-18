@@ -74,6 +74,17 @@ jointfromckd <- jointfromckd %>%
 # Kaplan-Meier estimates of survival function
 
 ### From CKD
+tiff("./OUTPUT/Exploratory_analysis/Figure 0. spaghetti plot (from CKD).tiff",
+     width = 3000, height = 2000, pointsize = 10, res = 300)
+jointfromckd %>% 
+    ungroup() %>% 
+    ggplot(aes(x = YearsFromCKDTransition, y = SBPpercentile)) +
+    geom_line(aes(group = id), size = 0.1) +
+    xlab("Duration of follow-up (in years)") +
+    ylab("SBP percentile") +
+    theme_minimal()
+dev.off()
+
 fit_FromCKD <- survfit(SurvObj_FromCKD ~ SBPgroup, data = jointfromckd)
 summary(fit_FromCKD)$table
 tbl_survfit(fit_FromCKD, times = seq(5, 20, 5))
@@ -117,6 +128,17 @@ dev.off()
 
 
 ### From baseline
+tiff("./OUTPUT/Exploratory_analysis/Figure 0. spaghetti plot (from Baseline).tiff",
+     width = 3000, height = 2000, pointsize = 10, res = 300)
+jointfromckd %>% 
+    ungroup() %>% 
+    ggplot(aes(x = YearsFromBaselineTransition, y = SBPpercentile)) +
+    geom_line(aes(group = id), size = 0.1) +
+    xlab("Duration of follow-up (in years)") +
+    ylab("SBP percentile") +
+    theme_minimal()
+dev.off()
+
 fit_FromBaseline <- survfit(SurvObj_FromBaseline ~ SBPgroup, data = jointfromckd)
 summary(fit_FromBaseline)$table
 tbl_survfit(fit_FromBaseline, times = seq(5, 20, 5))
