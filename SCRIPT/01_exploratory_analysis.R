@@ -38,38 +38,91 @@ jointfromckd <- jointfromckd %>%
                                    TRUE ~ 0))   # 304 cases (351 person-periods)
 
 
-# Exposure group
-jointfromckd <- jointfromckd %>% 
-    mutate(SBPgroup = cut(SBPpercentile, c(0, 50, 90, 95, 101), right = FALSE))
-
-
 # Set up time origin & time metric
 
-### Generate visit indicator variable
+### Generate visit variable
 jointfromckd <- jointfromckd %>% group_by(id) %>% mutate(visit = 1:n())
 
 ### Exclude participants not at risk (prevalent cases)
 prevalent_cases <- jointfromckd %>% filter(YearsFromBaseline == 0 & renalstatus == 1) %>% pull(id)
 jointfromckd <- jointfromckd %>% filter(!(id %in% prevalent_cases))
+rm(prevalent_cases)
 
-### Drop participants with missing data
-jointfromckd <- jointfromckd %>% drop_na(renalstatus, SBPgroup)
-
-### Drop participants with problematic follow-up time (end time < start time)
+### Drop person-periods with problematic follow-up time (end time < start time)
+jointfromckd %>% 
+    filter(id == "4148" | id == "5653") %>% 
+    select(id, contains("Years"))
 jointfromckd <- jointfromckd %>% 
     filter(YearsFromBaselineTransition > YearsFromBaseline |
            YearsFromCKDTransition > YearsFromCKD)   # 1 participant
 
-### Examine "gaps"
-jointfromckd %>% group_by(id) %>% mutate(visit_gap = visit - lag(visit)) %>% ungroup() %>% pull(visit_gap) %>% table()
-#    1    2    3    4    8 
-# 3572  104    9    1    1
-
-### Construct risk sets
+### Drop person-periods after event
 jointfromckd <- jointfromckd %>% 
-    mutate(SurvObj_FromCKD = Surv(YearsFromCKD, YearsFromCKDTransition, event = renalstatus)) %>% 
-    mutate(SurvObj_FromBaseline = Surv(YearsFromBaseline, YearsFromBaselineTransition, event = renalstatus))
+    group_by(id) %>% 
+    mutate(firstevent = min(which(renalstatus == 1 | row_number() == n()))) %>%
+    filter(row_number() <= firstevent) %>% 
+    mutate(firstevent = NULL)
 
+### Missing values in event status
+###>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+### Summary statistics
+table(is.na(jointfromckd$renalstatus))   # 105 person-periods have missing event status
+jointfromckd %>% filter(is.na(renalstatus)) %>% distinct(id) %>% nrow()   # 85 participants with missing event status
+jointfromckd %>% 
+    group_by(id) %>% 
+    filter(row_number() == n()) %>% 
+    filter(is.na(renalstatus)) %>% 
+    nrow()   # 53 participants' missing event status is in last person-periods
+###<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+###>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+### Aims: For person-periods of each participant
+### 1. Drop person-periods after last person-period with non missing event status (treat as right censored)
+### 2. Fill event status of person-periods with missing event status before last person-period with non missing event status as 0
+### Rules:
+### 1. Group by `id`
+### 2. Generate `indi` as:
+###    1.1 If event status is missing for a person-period, `indi` = 0
+###    1.2 If event status is not missing for a person-period, `indi` = 1
+### 3. Generate `rev_cumsum_indi` as cumulative sum of `indi` from last row to first row
+###    3.1 For person-periods before last person-period with non missing event status
+###     & last person-period with non missing event status, `rev_cumsum_indi` > 0
+###    3.2 For person-period after last person-period with non missing event status, `rev_cumsum_indi` = 0
+### 4. Filter person-period with `rev_cumsum_indi` > 0
+### 5. Change missing `renalstatus` for rest person-periods to 0
+###<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+jointfromckd <- jointfromckd %>% 
+    group_by(id) %>% 
+    mutate(indi = ifelse(is.na(renalstatus), 0, 1)) %>% 
+    mutate(rev_cumsum_indi = rev(cumsum(rev(indi)))) %>% 
+    filter(rev_cumsum_indi > 0) %>% 
+    mutate(renalstatus = ifelse(is.na(renalstatus), 0, renalstatus)) %>% 
+    mutate(indi = NULL, rev_cumsum_indi = NULL)
+
+### Last observation carried 1 cycle forward for missing exposures & covariates
+jointfromckd <- jointfromckd %>% 
+    group_by(id) %>% 
+    fill(- contains("Years"), - gfr, - RRTstatusAtTransition, - id, .direction = "downup")
+
+### Examine "gaps": 1 - no gaps, 2 - 1 gap
+jointfromckd %>% group_by(id) %>% mutate(visit_gap = visit - lag(visit)) %>% ungroup() %>% pull(visit_gap) %>% table()
+#    1    2 
+# 3949    2
+# All gaps generated from person-periods with problematic follow-up time (end time < start time)
+
+### # Exposure group
+jointfromckd <- jointfromckd %>% 
+    mutate(SBPgroup = cut(SBPpercentile, c(0, 50, 90, 95, 101), right = FALSE)) %>% 
+    mutate(DBPgroup = cut(DBPpercentile, c(0, 50, 90, 95, 101), right = FALSE)) %>% 
+    mutate(across(contains("group"),
+                  ~ case_when(.x == "[0,50)" ~ 1,
+                              .x == "[50,90)" ~ 2,
+                              .x == "[90,95)" ~ 3,
+                              .x == "[95,101)" ~ 4))) %>% 
+    mutate(BPgroup = max(SBPgroup, DBPgroup)) %>% 
+    mutate(visit = 1:n())
+
+write_rds(jointfromckd, file = "./INPUT/Cleaned/jointfromckd_survival.rds")
 
 # Kaplan-Meier estimates of survival function
 
@@ -80,6 +133,18 @@ jointfromckd %>%
     ungroup() %>% 
     ggplot(aes(x = YearsFromCKDTransition, y = SBPpercentile)) +
     geom_line(aes(group = id), size = 0.1) +
+    xlab("Duration of follow-up (in years)") +
+    ylab("SBP percentile") +
+    theme_minimal()
+dev.off()
+
+tiff("./OUTPUT/Exploratory_analysis/Figure 0. spaghetti plot (from CKD)_mean.tiff",
+     width = 3000, height = 2000, pointsize = 10, res = 300)
+jointfromckd %>% 
+    ungroup() %>% 
+    ggplot(aes(x = YearsFromCKDTransition, y = SBPpercentile)) +
+    geom_line(aes(group = id), size = 0.1, alpha = 0.3) +
+    geom_smooth() +
     xlab("Duration of follow-up (in years)") +
     ylab("SBP percentile") +
     theme_minimal()
@@ -134,6 +199,18 @@ jointfromckd %>%
     ungroup() %>% 
     ggplot(aes(x = YearsFromBaselineTransition, y = SBPpercentile)) +
     geom_line(aes(group = id), size = 0.1) +
+    xlab("Duration of follow-up (in years)") +
+    ylab("SBP percentile") +
+    theme_minimal()
+dev.off()
+
+tiff("./OUTPUT/Exploratory_analysis/Figure 0. spaghetti plot (from Baseline)_mean.tiff",
+     width = 3000, height = 2000, pointsize = 10, res = 300)
+jointfromckd %>% 
+    ungroup() %>% 
+    ggplot(aes(x = YearsFromBaselineTransition, y = SBPpercentile)) +
+    geom_line(aes(group = id), size = 0.1, alpha = 0.3) +
+    geom_smooth() +
     xlab("Duration of follow-up (in years)") +
     ylab("SBP percentile") +
     theme_minimal()

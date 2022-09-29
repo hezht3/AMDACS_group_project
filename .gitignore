@@ -43,3 +43,8 @@ vignettes/*.pdf
 
 # Output
 /OUTPUT/
+
+# Group admin
+/LABS/
+/Communication/
+*.pptx
