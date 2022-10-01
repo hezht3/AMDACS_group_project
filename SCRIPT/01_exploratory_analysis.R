@@ -7,6 +7,7 @@
 setwd("/Users/zhengtinghe/Library/CloudStorage/OneDrive-JohnsHopkins/Course/340.728.01 - Advanced Methods for Design and Analysis of Cohort Studies/project/AMDACS_group_project")
 
 require(tidyverse)
+require(haven)
 require(survival)
 require(survminer)
 require(ldatools)
@@ -48,13 +49,28 @@ prevalent_cases <- jointfromckd %>% filter(YearsFromBaseline == 0 & renalstatus 
 jointfromckd <- jointfromckd %>% filter(!(id %in% prevalent_cases))
 rm(prevalent_cases)
 
-### Drop person-periods with problematic follow-up time (end time < start time)
+### Resolve person-periods with problematic follow-up time (end time < start time)
+### Based on suggestions from office hours
 jointfromckd %>% 
     filter(id == "4148" | id == "5653") %>% 
-    select(id, contains("Years"))
+    select(id, contains("Years"), VisitAtTransition)
 jointfromckd <- jointfromckd %>% 
-    filter(YearsFromBaselineTransition > YearsFromBaseline |
-           YearsFromCKDTransition > YearsFromCKD)   # 1 participant
+    mutate(YearsFromCKD = ifelse(id == "4148" & VisitAtTransition == "4",
+                                 (15.3 + 17.1)/2, YearsFromCKD)) %>% 
+    mutate(YearsFromBaseline = ifelse(id == "4148" & VisitAtTransition == "4",
+                                      (1.2 + 2.97)/2, YearsFromBaseline)) %>% 
+    mutate(YearsFromCKD = ifelse(id == "5653" & VisitAtTransition == "5",
+                                 (2.60 + 4.48)/2, YearsFromCKD)) %>% 
+    mutate(YearsFromBaseline = ifelse(id == "5653" & VisitAtTransition == "5",
+                                      (1.93 + 3.81)/2, YearsFromBaseline)) %>% 
+    mutate(YearsFromCKDTransition = ifelse(id == "4148" & VisitAtTransition == "3",
+                                           (15.3 + 17.1)/2, YearsFromCKDTransition)) %>% 
+    mutate(YearsFromBaselineTransition = ifelse(id == "4148" & VisitAtTransition == "3",
+                                                (1.2 + 2.97)/2, YearsFromBaselineTransition)) %>% 
+    mutate(YearsFromCKDTransition = ifelse(id == "5653" & VisitAtTransition == "4",
+                                           (2.60 + 4.48)/2, YearsFromCKDTransition)) %>% 
+    mutate(YearsFromBaselineTransition = ifelse(id == "5653" & VisitAtTransition == "4",
+                                                (1.93 + 3.81)/2, YearsFromBaselineTransition))
 
 ### Drop person-periods after event
 jointfromckd <- jointfromckd %>% 
@@ -62,6 +78,41 @@ jointfromckd <- jointfromckd %>%
     mutate(firstevent = min(which(renalstatus == 1 | row_number() == n()))) %>%
     filter(row_number() <= firstevent) %>% 
     mutate(firstevent = NULL)
+
+
+#############################
+# Data set 1: complete case #
+#############################
+
+# Complete case in exposure, covariates, outcome
+jointfromckd_complete <- jointfromckd %>% 
+    drop_na(renalstatus, SBPpercentile, DBPpercentile,
+            creatinine:income, Heightpercentile:BMIpercentile, AgeAtCKD:Glomdx1NG0)
+
+### Examine "gaps": 1 - no gaps, 2 - 1 gap
+jointfromckd_complete %>% group_by(id) %>% mutate(visit_gap = visit - lag(visit)) %>% ungroup() %>% pull(visit_gap) %>% table()
+#    1    2    3    4    5    6 
+# 1766  346   60    7    4    1 
+
+### Exposure group
+jointfromckd_complete <- jointfromckd_complete %>% 
+    mutate(SBPgroup = cut(SBPpercentile, c(0, 50, 90, 95, 101), right = FALSE)) %>% 
+    mutate(DBPgroup = cut(DBPpercentile, c(0, 50, 90, 95, 101), right = FALSE)) %>% 
+    mutate(across(contains("group"),
+                  ~ case_when(.x == "[0,50)" ~ 1,
+                              .x == "[50,90)" ~ 2,
+                              .x == "[90,95)" ~ 3,
+                              .x == "[95,101)" ~ 4))) %>% 
+    mutate(BPgroup = max(SBPgroup, DBPgroup)) %>% 
+    mutate(visit = 1:n())
+
+write_rds(jointfromckd_complete, file = "./INPUT/Cleaned/jointfromckd_survival_complete.rds")
+write_dta(jointfromckd_complete, path = "./INPUT/Cleaned/jointfromckd_survival_complete.dta")
+
+
+####################################
+# Data set 2: LOCF & outcome rules #
+####################################
 
 ### Missing values in event status
 ###>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -91,7 +142,7 @@ jointfromckd %>%
 ### 5. Change missing `renalstatus` for rest person-periods to 0
 ###<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-jointfromckd <- jointfromckd %>% 
+jointfromckd_locf <- jointfromckd %>% 
     group_by(id) %>% 
     mutate(indi = ifelse(is.na(renalstatus), 0, 1)) %>% 
     mutate(rev_cumsum_indi = rev(cumsum(rev(indi)))) %>% 
@@ -100,18 +151,17 @@ jointfromckd <- jointfromckd %>%
     mutate(indi = NULL, rev_cumsum_indi = NULL)
 
 ### Last observation carried 1 cycle forward for missing exposures & covariates
-jointfromckd <- jointfromckd %>% 
+jointfromckd_locf <- jointfromckd_locf %>% 
     group_by(id) %>% 
-    fill(- contains("Years"), - gfr, - RRTstatusAtTransition, - id, .direction = "downup")
+    fill(- contains("Years"), - gfr, - RRTstatusAtTransition, - VisitAtTransition, - id,
+         .direction = "downup")
 
 ### Examine "gaps": 1 - no gaps, 2 - 1 gap
-jointfromckd %>% group_by(id) %>% mutate(visit_gap = visit - lag(visit)) %>% ungroup() %>% pull(visit_gap) %>% table()
-#    1    2 
-# 3949    2
-# All gaps generated from person-periods with problematic follow-up time (end time < start time)
+jointfromckd_locf %>% group_by(id) %>% mutate(visit_gap = visit - lag(visit)) %>% ungroup() %>% pull(visit_gap) %>% table()
+###### no gaps
 
-### # Exposure group
-jointfromckd <- jointfromckd %>% 
+### Exposure group
+jointfromckd_locf <- jointfromckd_locf %>% 
     mutate(SBPgroup = cut(SBPpercentile, c(0, 50, 90, 95, 101), right = FALSE)) %>% 
     mutate(DBPgroup = cut(DBPpercentile, c(0, 50, 90, 95, 101), right = FALSE)) %>% 
     mutate(across(contains("group"),
@@ -122,8 +172,16 @@ jointfromckd <- jointfromckd %>%
     mutate(BPgroup = max(SBPgroup, DBPgroup)) %>% 
     mutate(visit = 1:n())
 
-write_rds(jointfromckd, file = "./INPUT/Cleaned/jointfromckd_survival.rds")
+jointfromckd_locf <- jointfromckd_locf %>% 
+    drop_na(BPgroup,
+            creatinine:income, Heightpercentile:BMIpercentile, AgeAtCKD:Glomdx1NG0)
 
+write_rds(jointfromckd_locf, file = "./INPUT/Cleaned/jointfromckd_survival_locf.rds")
+write_dta(jointfromckd_locf, path = "./INPUT/Cleaned/jointfromckd_survival_locf.dta")
+
+
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 # Kaplan-Meier estimates of survival function
 
 ### From CKD
