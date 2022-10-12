@@ -208,13 +208,13 @@ jointfromckd %>%
     theme_minimal()
 dev.off()
 
-fit_FromCKD <- survfit(SurvObj_FromCKD ~ SBPgroup, data = jointfromckd)
+fit_FromCKD <- survfit(Surv(YearsFromBaseline, YearsFromBaselineTransition, renalstatus) ~ BPgroup, data = jointfromckd_complete)
 summary(fit_FromCKD)$table
 tbl_survfit(fit_FromCKD, times = seq(5, 20, 5))
 
 tiff("./OUTPUT/Exploratory_analysis/Figure 1. survival curve (from CKD).tiff",
      width = 3000, height = 2000, pointsize = 10, res = 300)
-ggsurvplot(fit_FromCKD, data = jointfromckd,
+ggsurvplot(fit_FromCKD, data = jointfromckd_complete,
            palette = "jama", linetype = 1, censor.size = 0.8,
            xlab = "Duration of follow-up (in years)", ylab = "Probability of survival",
            break.x.by = 5, #conf.int = TRUE,
