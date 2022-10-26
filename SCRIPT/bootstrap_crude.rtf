@@ -1,0 +1,64 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2639
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 . * Bootstrap to obtain CI for differences of quantiles\
+. bootstrap, seed(19210428) reps(500) ///\
+>         saving(500saturatedGG.dta, replace): ///\
+> streg SBPgroup2 SBPgroup3 SBPgroup4, ///\
+>         anc(SBPgroup2 SBPgroup3 SBPgroup4) ///\
+>         anc2(SBPgroup2 SBPgroup3 SBPgroup4) ///\
+>         dist(ggamma) time iter(50)\
+(running streg on estimation sample)\
+(note: file 500saturatedGG.dta not found)\
+\
+Bootstrap replications (500)\
+----+--- 1 ---+--- 2 ---+--- 3 ---+--- 4 ---+--- 5 \
+..x....xx..x...x.x.x.x.....x......x.x...........x.    50\
+x........x.x.....x.....x...x..x...xxx...x....x...x   100\
+...xx...x.x.x.....x......x....x...x...............   150\
+..x.x....xx.............x...xx.x..x.......x....x.x   200\
+.....x..x..xx......x.....x..x..x....x...x.xx......   250\
+..xx.x..x...xxx....x..x.xx...x.....x..x..x...xxx..   300\
+...x..x.x....x.x.x....xx..x.....xx...x....x..xx...   350\
+.x..x.....x......x.....x..x..x.x.........x...x..x.   400\
+....x.x.x.x...xxxx.xxxx..x.....x..xx...x..x.......   450\
+.x......xx.x.x.x.x.x..x.x.....x.x.xxx.x.xx.xxxxx..   500\
+\
+Generalized gamma AFT regression\
+\
+No. of subjects =        4,389                  Number of obs    =       4,389\
+No. of failures =          249\
+Time at risk    =     4494.758\
+                                                Wald chi2(3)     =       16.96\
+Log likelihood  =   -297.79334                  Prob > chi2      =      0.0007\
+\
+------------------------------------------------------------------------------\
+             |   Observed   Bootstrap                         Normal-based\
+          _t |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]\
+-------------+----------------------------------------------------------------\
+_t           |\
+   SBPgroup2 |  -.1724009   .1314509    -1.31   0.190    -.4300399    .0852381\
+   SBPgroup3 |  -.4943585   .1953102    -2.53   0.011    -.8771594   -.1115575\
+   SBPgroup4 |  -.9248593   .2474928    -3.74   0.000    -1.409936   -.4397824\
+       _cons |   3.301101   .1117563    29.54   0.000     3.082063    3.520139\
+-------------+----------------------------------------------------------------\
+lnsigma      |\
+   SBPgroup2 |  -.2344583   .2725719    -0.86   0.390    -.7686894    .2997728\
+   SBPgroup3 |  -.1605945   .4177034    -0.38   0.701    -.9792781    .6580891\
+   SBPgroup4 |   .0914396   .3616768     0.25   0.800    -.6174338     .800313\
+       _cons |  -.6562403   .2373913    -2.76   0.006    -1.121519    -.190962\
+-------------+----------------------------------------------------------------\
+kappa        |\
+   SBPgroup2 |   .3778648   .6818883     0.55   0.579    -.9586116    1.714341\
+   SBPgroup3 |   .7459438   2.039709     0.37   0.715    -3.251812    4.743699\
+   SBPgroup4 |  -.8402945   2.897109    -0.29   0.772    -6.518523    4.837934\
+       _cons |   1.309775   .5811772     2.25   0.024     .1706887    2.448862\
+------------------------------------------------------------------------------\
+\
+. \
+end of do-file\
+}
